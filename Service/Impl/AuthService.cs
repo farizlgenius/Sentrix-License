@@ -8,7 +8,7 @@ using StackExchange.Redis;
 
 namespace LicenseService.Service.Impl;
 
-public sealed class AuthService(AppDbContext context,IDatabase redis) : IAuthService
+public sealed class AuthService(AppDbContext context, IDatabase redis) : IAuthService
 {
 
       public async Task<BaseDto<ExchangeResponse>> ExchangeAsync(ExchangeRequest request)
@@ -22,7 +22,7 @@ public sealed class AuthService(AppDbContext context,IDatabase redis) : IAuthSer
             var dataToVerify = appDhPub.Concat(appSignPub).ToArray();
 
             // Step 3 : Verify Client Signature
-            if(!EncryptHelper.VerifyData(dataToVerify,appSignature,appSignPub))
+            if (!EncryptHelper.VerifyData(dataToVerify, appSignature, appSignPub))
             {
                   return new BaseDto<ExchangeResponse>(
                         System.Net.HttpStatusCode.Unauthorized,
@@ -36,7 +36,7 @@ public sealed class AuthService(AppDbContext context,IDatabase redis) : IAuthSer
             // Step 4 : Get Signer from database
             var sign = await context.sign_key
             .AsNoTracking()
-            .OrderByDescending(s => s.created_date)
+            .OrderByDescending(s => s.created_at)
             .FirstOrDefaultAsync(s => s.is_revoked == false);
 
             if (sign is null)
@@ -59,7 +59,7 @@ public sealed class AuthService(AppDbContext context,IDatabase redis) : IAuthSer
             var serverDhPublic = EncryptHelper.ExportDhPublicKey(serverDh);
 
             var dataToSign = serverDhPublic.Concat(serverSignPub).ToArray();
-            var signature = EncryptHelper.SignData(signer,dataToSign);
+            var signature = EncryptHelper.SignData(signer, dataToSign);
 
             // Step 4 : Store Auth Session in Redis
             var authSession = new AuthSession(
@@ -70,12 +70,12 @@ public sealed class AuthService(AppDbContext context,IDatabase redis) : IAuthSer
                   DateTime.UtcNow.AddMinutes(5)
             );
 
-            if(await redis.KeyExistsAsync(request.sessionId))
+            if (await redis.KeyExistsAsync(request.sessionId))
             {
                   await redis.KeyDeleteAsync(request.sessionId);
             }
 
-            await redis.StringSetAsync(request.sessionId,JsonSerializer.Serialize(authSession),TimeSpan.FromMinutes(5));
+            await redis.StringSetAsync(request.sessionId, JsonSerializer.Serialize(authSession), TimeSpan.FromMinutes(5));
 
             var response = new ExchangeResponse(
                   request.sessionId,

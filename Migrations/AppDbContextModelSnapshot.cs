@@ -17,12 +17,13 @@ namespace LicenseService.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
+                .HasDefaultSchema("license")
                 .HasAnnotation("ProductVersion", "10.0.0")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("LicenseService.Entity.License", b =>
+            modelBuilder.Entity("LicenseService.Entities.License", b =>
                 {
                     b.Property<int>("id")
                         .ValueGeneratedOnAdd()
@@ -34,15 +35,24 @@ namespace LicenseService.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<DateTime>("created_date")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<DateTime>("created_at")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("NOW() AT TIME ZONE 'UTC'");
 
                     b.Property<string>("customer_site")
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<DateTime>("expire_date")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<DateTime>("expire_at")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("(NOW() AT TIME ZONE 'UTC') + INTERVAL '1 year'");
+
+                    b.Property<Guid>("guid")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
 
                     b.Property<byte[]>("license")
                         .IsRequired()
@@ -55,17 +65,17 @@ namespace LicenseService.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<Guid>("sign_key_uuid")
+                    b.Property<Guid>("sign_key_guid")
                         .HasColumnType("uuid");
 
                     b.HasKey("id");
 
-                    b.HasIndex("sign_key_uuid");
+                    b.HasIndex("sign_key_guid");
 
-                    b.ToTable("license");
+                    b.ToTable("license", "license");
                 });
 
-            modelBuilder.Entity("LicenseService.Entity.SignKeyAudit", b =>
+            modelBuilder.Entity("LicenseService.Entities.SignKeyAudit", b =>
                 {
                     b.Property<int>("id")
                         .ValueGeneratedOnAdd()
@@ -73,17 +83,23 @@ namespace LicenseService.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("id"));
 
-                    b.Property<DateTime>("created_date")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<DateTime>("created_at")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("NOW() AT TIME ZONE 'UTC'");
 
-                    b.Property<DateTime>("expire_date")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<DateTime>("expire_at")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("(NOW() AT TIME ZONE 'UTC') + INTERVAL '1 year'");
+
+                    b.Property<Guid>("guid")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
 
                     b.Property<bool>("is_revoked")
                         .HasColumnType("boolean");
-
-                    b.Property<Guid>("sign_key_uuid")
-                        .HasColumnType("uuid");
 
                     b.Property<byte[]>("sign_priv")
                         .IsRequired()
@@ -95,22 +111,22 @@ namespace LicenseService.Migrations
 
                     b.HasKey("id");
 
-                    b.ToTable("sign_key");
+                    b.ToTable("sign_key", "license");
                 });
 
-            modelBuilder.Entity("LicenseService.Entity.License", b =>
+            modelBuilder.Entity("LicenseService.Entities.License", b =>
                 {
-                    b.HasOne("LicenseService.Entity.SignKeyAudit", "sign_key")
+                    b.HasOne("LicenseService.Entities.SignKeyAudit", "sign_key")
                         .WithMany("licenses")
-                        .HasForeignKey("sign_key_uuid")
-                        .HasPrincipalKey("sign_key_uuid")
+                        .HasForeignKey("sign_key_guid")
+                        .HasPrincipalKey("guid")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("sign_key");
                 });
 
-            modelBuilder.Entity("LicenseService.Entity.SignKeyAudit", b =>
+            modelBuilder.Entity("LicenseService.Entities.SignKeyAudit", b =>
                 {
                     b.Navigation("licenses");
                 });

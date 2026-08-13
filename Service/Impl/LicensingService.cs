@@ -3,7 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using LicenseService.Data;
-using LicenseService.Entity;
+using LicenseService.Entities;
 using LicenseService.Helper;
 using LicenseService.Model;
 using Microsoft.EntityFrameworkCore;
@@ -33,9 +33,9 @@ public class LicensingService(IOptions<AppConfigSetting> options, AppDbContext c
 
     var authJson = JsonSerializer.Deserialize<AuthSession>(authSession.ToString(), jopts);
 
-    if(authJson is null) return new BaseDto<EncryptedLicense>(System.Net.HttpStatusCode.Unauthorized, null, Guid.NewGuid(), "Invalid session data", DateTime.UtcNow.ToLocalTime());
+    if (authJson is null) return new BaseDto<EncryptedLicense>(System.Net.HttpStatusCode.Unauthorized, null, Guid.NewGuid(), "Invalid session data", DateTime.UtcNow.ToLocalTime());
 
-    if(authJson.expiresAt < DateTime.UtcNow) return new BaseDto<EncryptedLicense>(System.Net.HttpStatusCode.Unauthorized, null, Guid.NewGuid(), "Session expired", DateTime.UtcNow.ToLocalTime());
+    if (authJson.expiresAt < DateTime.UtcNow) return new BaseDto<EncryptedLicense>(System.Net.HttpStatusCode.Unauthorized, null, Guid.NewGuid(), "Session expired", DateTime.UtcNow.ToLocalTime());
 
     // Step 2 : Checking demo license availability
     var isAvailable = await context.license.AsNoTracking().AnyAsync(x => x.machine_id.Equals(request.machineId));
@@ -74,7 +74,7 @@ public class LicensingService(IOptions<AppConfigSetting> options, AppDbContext c
     // Step 4 : Get Signer from database
     var sign = await context.sign_key
     .AsNoTracking()
-    .OrderByDescending(s => s.created_date)
+    .OrderByDescending(s => s.created_at)
     .FirstOrDefaultAsync(s => s.is_revoked == false);
 
     if (sign is null)
@@ -94,7 +94,7 @@ public class LicensingService(IOptions<AppConfigSetting> options, AppDbContext c
     var secrets = EncryptHelper.DeriveSecretKey(EncryptHelper.LoadDhPrivateKey(serverSignPri), authJson.appDhPub);
 
     // Step 5 : Server sign and encrypt license
-    var key = EncryptHelper.DeriveAesKey(secrets,_settings.Secret);
+    var key = EncryptHelper.DeriveAesKey(secrets, _settings.Secret);
     var signature = EncryptHelper.SignData(signer, data);
     var pay = EncryptHelper.BuildPayload(data, signature);
     var enc = EncryptHelper.EncryptAes(key, pay);
@@ -106,17 +106,15 @@ public class LicensingService(IOptions<AppConfigSetting> options, AppDbContext c
       Convert.ToBase64String(serverSignPub)
     );
 
-    var en = new Entity.License
-    {
-      company = request.company,
-      customer_site = request.customerSite,
-      machine_id = request.machineId,
-      license = enc,
-      sign_key_uuid = sign.sign_key_uuid,
-      license_type = Enums.LicenseType.Demo,
-      created_date = DateTime.Now,
-      expire_date = DateTime.Now.AddDays(_settings.DemoLicense.DurationInDays),
-    };
+    var en = new License(
+      request.company,
+      request.customerSite,
+      request.machineId,
+      enc,
+      Enums.LicenseType.Demo,
+      sign.guid,
+      DateTime.Now.AddDays(_settings.DemoLicense.DurationInDays)
+    );
 
     // File.WriteAllText("license.json", JsonSerializer.Serialize(license, new JsonSerializerOptions { WriteIndented = true }));
     // Console.WriteLine("License generated.");

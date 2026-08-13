@@ -1,5 +1,5 @@
 using LicenseService.Data;
-using LicenseService.Entity;
+using LicenseService.Entities;
 using LicenseService.Helper;
 using LicenseService.Service;
 using Microsoft.EntityFrameworkCore;
@@ -35,15 +35,11 @@ public class StartupTask : IHostedService
     if (!hasKey)
     {
       var signer = EncryptHelper.CreateSigner();
-      var en = new SignKeyAudit
-      {
-        sign_key_uuid = Guid.NewGuid(),
-        sign_pub = signer.ExportSubjectPublicKeyInfo(),
-        sign_priv = signer.ExportPkcs8PrivateKey(),
-        created_date = DateTime.UtcNow,
-        expire_date = DateTime.UtcNow.AddYears(1),
-        is_revoked = false
-      };
+      var en = new SignKeyAudit(
+        signer.ExportSubjectPublicKeyInfo(),
+        signer.ExportPkcs8PrivateKey(),
+        DateTime.UtcNow.AddYears(1)
+      );
 
       await context.sign_key.AddAsync(en, cancellationToken);
       await context.SaveChangesAsync(cancellationToken);

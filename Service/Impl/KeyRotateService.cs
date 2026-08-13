@@ -1,6 +1,6 @@
 using System;
 using LicenseService.Data;
-using LicenseService.Entity;
+using LicenseService.Entities;
 using LicenseService.Helper;
 using LicenseService.Model;
 using Microsoft.EntityFrameworkCore;
@@ -15,7 +15,7 @@ public sealed class KeyRotateService(AppDbContext context, IOptions<AppConfigSet
   public async Task CheckRotateNeededAsync()
   {
     var key = await context.sign_key
-      .OrderByDescending(k => k.created_date)
+      .OrderByDescending(k => k.created_at)
       .Where(x => !x.is_revoked)
       .FirstOrDefaultAsync();
 
@@ -26,15 +26,11 @@ public sealed class KeyRotateService(AppDbContext context, IOptions<AppConfigSet
 
       // Generate new key
       var signer = EncryptHelper.CreateSigner();
-      var en = new SignKeyAudit
-      {
-        sign_key_uuid = Guid.NewGuid(),
-        sign_pub = signer.ExportSubjectPublicKeyInfo(),
-        sign_priv = signer.ExportPkcs8PrivateKey(),
-        created_date = DateTime.UtcNow,
-        expire_date = DateTime.UtcNow.AddYears(1),
-        is_revoked = false
-      };
+      var en = new SignKeyAudit(
+        signer.ExportSubjectPublicKeyInfo(),
+        signer.ExportPkcs8PrivateKey(),
+        DateTime.UtcNow.AddYears(1)
+        );
 
       await context.sign_key.AddAsync(en);
       await context.SaveChangesAsync();
@@ -44,7 +40,7 @@ public sealed class KeyRotateService(AppDbContext context, IOptions<AppConfigSet
 
     }
 
-    if (key.expire_date <= DateTime.UtcNow)
+    if (key.expire_at <= DateTime.UtcNow)
     {
       // Rotate key
       Console.WriteLine("Rotating keys...");
@@ -53,15 +49,11 @@ public sealed class KeyRotateService(AppDbContext context, IOptions<AppConfigSet
       context.sign_key.Update(key);
 
       var signer = EncryptHelper.CreateSigner();
-      var en = new SignKeyAudit
-      {
-        sign_key_uuid = Guid.NewGuid(),
-        sign_pub = signer.ExportSubjectPublicKeyInfo(),
-        sign_priv = signer.ExportPkcs8PrivateKey(),
-        created_date = DateTime.UtcNow,
-        expire_date = DateTime.UtcNow.AddYears(1),
-        is_revoked = false
-      };
+      var en = new SignKeyAudit(
+        signer.ExportSubjectPublicKeyInfo(),
+        signer.ExportPkcs8PrivateKey(),
+        DateTime.UtcNow.AddYears(1)
+      );
 
       await context.sign_key.AddAsync(en);
       await context.SaveChangesAsync();

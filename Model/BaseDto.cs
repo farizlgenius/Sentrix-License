@@ -3,4 +3,4 @@ using System.Net;
 
 namespace LicenseService.Model;
 
-public record BaseDto<T>(HttpStatusCode code, T payload, Guid uuid, string message, DateTime timeStamp);
+public record BaseDto<T>(HttpStatusCode Code, T Payload, Guid Guid, string Message, DateTime TimeStamp);
