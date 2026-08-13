@@ -10,12 +10,7 @@ namespace LicenseService.Controllers
     [ApiController]
     public class AuthController(IAuthService service) : ControllerBase
     {
-        [HttpPost("exchange")]
-        public async Task<IActionResult> ExchangeAsync([FromBody] ExchangeRequest request)
-        {
-            var res = await service.ExchangeAsync(request);
-            return Ok(res);
-        }
+
 
     }
 }

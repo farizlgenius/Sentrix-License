@@ -1,9 +1,13 @@
+using System.Net;
+using Host.Middlewares;
 using LicenseService.Data;
 using LicenseService.Exceptions;
+using LicenseService.Middlewares;
 using LicenseService.Model;
 using LicenseService.Service;
 using LicenseService.Service.Impl;
 using LicenseService.Worker;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 using StackExchange.Redis;
@@ -66,9 +70,35 @@ builder.Services.AddHostedService<KeyRotationWorker>();
 builder.Services.AddScoped<ILicenseService, LicensingService>();
 builder.Services.AddScoped<IKeyRotateService, KeyRotateService>();
 builder.Services.AddScoped<IRedisService, RedisService>();
-builder.Services.AddTransient<ExceptionHandlingMiddleware>();
+builder.Services.AddTransient<GlobalException>();
 
-builder.Services.AddControllers();
+builder.Services.AddControllers(options =>
+        {
+            options.Filters.Add<ApiResponseFilter>();
+        }).ConfigureApiBehaviorOptions(options =>
+        {
+            options.InvalidModelStateResponseFactory = context =>
+            {
+                var errors = context.ModelState
+                 .Where(x => x.Value?.Errors.Count > 0)
+                 .ToDictionary(
+                     x => x.Key,
+                     x => x.Value!.Errors
+                         .Select(e => e.ErrorMessage)
+                         .ToArray()
+                 );
+
+                return new BadRequestObjectResult(
+                    new ValidateBaseResponse<object>(
+                        DateTime.UtcNow,
+                        HttpStatusCode.BadRequest,
+                        false,
+                        "Validation failed.",
+                        Errors: errors
+                    )
+                );
+            };
+        });
 
 var app = builder.Build();
 
@@ -87,7 +117,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseMiddleware<ExceptionHandlingMiddleware>();
+app.UseMiddleware<GlobalException>();
 
 
 app.UseCors("AllowSpecificOrigins");

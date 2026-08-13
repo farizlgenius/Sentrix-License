@@ -11,13 +11,7 @@ namespace LicenseService.Controllers
         [HttpGet("health")]
         public IActionResult GetHealthAsync()
         {
-            return Ok(new BaseDto<HealthDto>(
-                System.Net.HttpStatusCode.OK,
-                new HealthDto("UP", DateTime.UtcNow),
-                Guid.NewGuid(),
-                "Service is UP",
-                DateTime.UtcNow
-            ));
+            return Ok(new HealthDto("UP", DateTime.UtcNow));
         }
     }
 }

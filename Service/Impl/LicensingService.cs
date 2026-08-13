@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using LicenseService.Data;
 using LicenseService.Entities;
+using LicenseService.Exceptions;
 using LicenseService.Helper;
 using LicenseService.Model;
 using Microsoft.EntityFrameworkCore;
@@ -25,22 +26,26 @@ public class LicensingService(IOptions<AppConfigSetting> options, AppDbContext c
     throw new NotImplementedException();
   }
 
-  public async Task<BaseDto<EncryptedLicense>> CreateLicenseDemoAsync(GenerateDemo request)
+  public async Task<EncryptedLicense> CreateLicenseDemoAsync(GenerateDemo request)
   {
     // Step 1 : Check and get DH Key from redis or database
     var authSession = await redis.StringGetAsync(request.sessionId);
-    if (authSession.IsNullOrEmpty) return new BaseDto<EncryptedLicense>(System.Net.HttpStatusCode.Unauthorized, null, Guid.NewGuid(), "Invalid session", DateTime.UtcNow.ToLocalTime());
+    if (authSession.IsNullOrEmpty)
+      throw new UnauthorizedException("Invalid session");
 
     var authJson = JsonSerializer.Deserialize<AuthSession>(authSession.ToString(), jopts);
 
-    if (authJson is null) return new BaseDto<EncryptedLicense>(System.Net.HttpStatusCode.Unauthorized, null, Guid.NewGuid(), "Invalid session data", DateTime.UtcNow.ToLocalTime());
+    if (authJson is null)
+      throw new UnauthorizedException("Invalid session data");
 
-    if (authJson.expiresAt < DateTime.UtcNow) return new BaseDto<EncryptedLicense>(System.Net.HttpStatusCode.Unauthorized, null, Guid.NewGuid(), "Session expired", DateTime.UtcNow.ToLocalTime());
+    if (authJson.expiresAt < DateTime.UtcNow)
+      throw new UnauthorizedException("Session expired");
 
     // Step 2 : Checking demo license availability
     var isAvailable = await context.license.AsNoTracking().AnyAsync(x => x.machine_id.Equals(request.machineId));
 
-    if (isAvailable) return new BaseDto<EncryptedLicense>(System.Net.HttpStatusCode.BadRequest, null, Guid.NewGuid(), "Demo license already exists", DateTime.UtcNow.ToLocalTime());
+    if (isAvailable)
+      throw new BadRequestException("Demo license already exists");
 
     // Step 3 : Get demo license details from settings
 
@@ -78,15 +83,7 @@ public class LicensingService(IOptions<AppConfigSetting> options, AppDbContext c
     .FirstOrDefaultAsync(s => s.is_revoked == false);
 
     if (sign is null)
-    {
-      return new BaseDto<EncryptedLicense>(
-            System.Net.HttpStatusCode.InternalServerError,
-            null,
-            Guid.NewGuid(),
-            "No valid signing key found",
-            DateTime.UtcNow.ToLocalTime()
-      );
-    }
+      throw new Exception("No valid signing key found");
 
     var serverSignPri = sign.sign_priv;
     var serverSignPub = sign.sign_pub;
@@ -123,12 +120,64 @@ public class LicensingService(IOptions<AppConfigSetting> options, AppDbContext c
     await context.SaveChangesAsync();
 
 
-    return new BaseDto<EncryptedLicense>(
-      System.Net.HttpStatusCode.OK,
-      license,
-      Guid.NewGuid(),
-      "Demo license generation successful",
-      DateTime.UtcNow.ToLocalTime()
+    return license;
+  }
+
+  public async Task<ExchangeResponse> ExchangeAsync(ExchangeRequest request)
+  {
+    // Step 1 : Get Client Public Keys
+    var appDhPub = Convert.FromBase64String(request.appDhPublic);
+    var appSignPub = Convert.FromBase64String(request.appSignPublic);
+    var appSignature = Convert.FromBase64String(request.signature);
+
+    // Step 2 : Construct data to verify client signature
+    var dataToVerify = appDhPub.Concat(appSignPub).ToArray();
+
+    // Step 3 : Verify Client Signature
+    if (!EncryptHelper.VerifyData(dataToVerify, appSignature, appSignPub))
+      throw new UnauthorizedException("Client signature verification failed");
+
+    // Step 4 : Get Signer from database
+    var sign = await context.sign_key
+    .AsNoTracking()
+    .OrderByDescending(s => s.created_at)
+    .FirstOrDefaultAsync(s => s.is_revoked == false);
+
+    if (sign is null)
+      throw new Exception("No valid signing key found");
+
+    var serverSignPri = sign.sign_priv;
+    var serverSignPub = sign.sign_pub;
+    var signer = EncryptHelper.LoadSignerPrivateKey(serverSignPri);
+
+    // Step 5 : Create Server Key Pair
+    var serverDh = EncryptHelper.CreateDh();
+    var serverDhPublic = EncryptHelper.ExportDhPublicKey(serverDh);
+
+    var dataToSign = serverDhPublic.Concat(serverSignPub).ToArray();
+    var signature = EncryptHelper.SignData(signer, dataToSign);
+
+    // Step 4 : Store Auth Session in Redis
+    var authSession = new AuthSession(
+          serverDhPublic,
+          appDhPub,
+          appSignPub,
+          serverDh,
+          DateTime.UtcNow.AddMinutes(5)
+    );
+
+    if (await redis.KeyExistsAsync(request.sessionId))
+    {
+      await redis.KeyDeleteAsync(request.sessionId);
+    }
+
+    await redis.StringSetAsync(request.sessionId, JsonSerializer.Serialize(authSession), TimeSpan.FromMinutes(5));
+
+    return new ExchangeResponse(
+          request.sessionId,
+          Convert.ToBase64String(serverDhPublic),
+          Convert.ToBase64String(serverSignPub),
+          Convert.ToBase64String(signature)
     );
   }
 }

@@ -5,6 +5,7 @@ namespace LicenseService.Service.Impl;
 
 public interface ILicenseService
 {
-  Task<BaseDto<EncryptedLicense>> CreateLicenseDemoAsync(GenerateDemo fingerPrint);
+  Task<EncryptedLicense> CreateLicenseDemoAsync(GenerateDemo fingerPrint);
   Task<EncryptedLicense> CreateLicenseAsync(LicensePayload payload);
+  Task<ExchangeResponse> ExchangeAsync(ExchangeRequest request);
 }
